@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      target: production
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_APP=app/main.py
+    volumes:
+      - ./app:/app/app
+      - ./tests:/app/tests
+    command: python -m app.main
