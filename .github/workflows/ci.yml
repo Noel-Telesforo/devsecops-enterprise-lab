@@ -1,0 +1,135 @@
+# ============================================
+# CI PIPELINE PROFESIONAL - PYTHON
+# ============================================
+
+name: CI Pipeline
+
+# 🔥 EVENTOS QUE LO DISPARAN
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# 🔥 CONTROL DE CONCURRENCIA
+# Cancela ejecuciones anteriores en el mismo PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# 🔥 PERMISOS MÍNIMOS (principio de menor privilegio)
+permissions:
+  contents: read
+
+# ============================================
+# JOBS
+# ============================================
+
+jobs:
+  # ==========================================
+  # JOB 1: Tests en múltiples versiones de Python
+  # ==========================================
+  test:
+    name: Test on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+
+    # 🔥 ESTRATEGIA DE MATRIZ
+    strategy:
+      # Si una versión falla, las demás siguen ejecutándose
+      fail-fast: false
+      # Lista de versiones a probar
+      matrix:
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+
+    steps:
+      # 1. Descargar el código
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Configurar Python con caché automático
+      - name: Setup Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          # 🔥 CACHÉ: Guarda las dependencias de pip
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      # 3. Instalar dependencias
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+
+      # 4. Ejecutar tests con cobertura
+      - name: Run tests with coverage
+        run: |
+          pytest -v --cov=app --cov-report=xml --cov-report=html
+
+      # 5. Subir reporte de cobertura como artefacto
+      - name: Upload coverage report
+        if: always()  # Se ejecuta incluso si los tests fallan
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-python-${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            htmlcov/
+
+  # ==========================================
+  # JOB 2: Construir Docker (solo después de que los tests pasen)
+  # ==========================================
+  docker-build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    # 🔥 DEPENDENCIA: Este job espera a que 'test' termine exitosamente
+    needs: test
+    # Solo ejecutar si todos los tests pasaron
+    if: success()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t devsecops-enterprise-lab:${{ github.sha }} .
+          docker images
+
+      # Guardar la imagen como artefacto (opcional)
+      - name: Save Docker image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: /tmp/docker-image.tar
+
+  # ==========================================
+  # JOB 3: Linting y formato (opcional pero recomendado)
+  # ==========================================
+  lint:
+    name: Lint and Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install linting tools
+        run: |
+          pip install flake8 black pylint
+
+      - name: Run flake8 (style guide)
+        run: flake8 app/ tests/ --max-line-length=120
+
+      - name: Run black (check formatting)
+        run: black --check app/ tests/
+
+      - name: Run pylint (code analysis)
+        run: pylint app/ tests/ --fail-under=8.0 || true  # No falla si no llega a 8
