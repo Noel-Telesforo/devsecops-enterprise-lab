@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 
 main_bp = Blueprint('main', __name__)
 
+
 @main_bp.route('/', methods=['GET'])
 def home():
     """Página principal"""
@@ -11,10 +12,12 @@ def home():
         'status': 'running'
     })
 
+
 @main_bp.route('/health', methods=['GET'])
 def health():
     """Health check para monitoreo"""
     return jsonify({'status': 'healthy'}), 200
+
 
 @main_bp.route('/api/v1/users', methods=['GET'])
 def get_users():
@@ -26,13 +29,14 @@ def get_users():
     ]
     return jsonify({'users': users})
 
+
 @main_bp.route('/api/v1/users', methods=['POST'])
 def create_user():
     """Crear un nuevo usuario"""
     data = request.get_json()
     if not data or 'name' not in data:
         return jsonify({'error': 'Name is required'}), 400
-    
+
     # Simulamos creación
     new_user = {
         'id': 4,
